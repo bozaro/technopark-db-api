@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #encoding: utf-8
 import os
 import sys
@@ -7,19 +8,25 @@ import time
 import pprint
 import random
 import requests
-import urlparse
 import datetime
 import itertools
 from optparse import OptionParser
 
+if sys.version_info[0] > 2:
+    import urllib.parse
+    from itertools import zip_longest
+else:
+    import urlparse
+    from itertools import izip_longest as zip_longest
+
 import func_test_constants as constants
-sys.path.append('../lib')
-sys.path.append('../doc')
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'doc'))
 
 import tools
 from doc_conf import DISCR
 
-CONFIG_PATH = '/usr/local/etc/test.conf'
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'conf', 'test.conf')
 settings = tools.Configuration(CONFIG_PATH).get_section('func_test')
 
 class TestLog(object):
@@ -31,7 +38,7 @@ class TestLog(object):
         time = datetime.datetime.now().strftime('[%Y-%m-%d %H:%M:%S] ')
         msg = time + message
         if self.verbose:
-            print message
+            print (message)
         self.test_log.append({'message': message, 'level': level})
 
 
@@ -46,7 +53,7 @@ class TestError(object):
         self.err_info = {}
 
     def save_and_exit(self, exit=True):
-        print 'EXIT!'
+        print ('EXIT!')
         if exit:
             sys.exit(0)        
 
@@ -73,7 +80,7 @@ class Actor(object):
             self.doc(url, query_dict, method, response)
             req_time = time.time() - start
             log.write('Request time was: %.4f sec' % req_time)
-        except ValueError, e:
+        except ValueError as e:
             log.write('Request error: %s' % str(e), level='error')
             location = self.url_prefix.split('/')[-1] + '/' + url_suffix
             if 'details' not in location:
@@ -135,7 +142,7 @@ class Actor(object):
             cls = cls_for_location[new_type]
         try:
             obj = cls(**response)
-        except Exception, e:
+        except Exception as e:
             log.write('Cannot create <%s> object from response. Response: %s' % (cls.__name__, str(response)), level='error')
             obj = cls()
         return obj
@@ -187,7 +194,7 @@ class Actor(object):
         api_obj = self.details(obj=test_obj, related=related)
         try:
             is_valid = test_obj == api_obj
-        except Exception, e:
+        except Exception as e:
             log.write('Validation error: %s' % e, level='error')
             is_valid = False
         if (location not in TESTS or TESTS.get(location) != False) and not only_check:
@@ -198,12 +205,12 @@ class Actor(object):
         location = self._get_api_location()
         log.write('Validating by requesting list of objects')
         if len(api_obj_list) == len(test_obj_list):
-            for test_obj, api_obj in itertools.izip_longest(test_obj_list, api_obj_list):
+            for test_obj, api_obj in zip_longest(test_obj_list, api_obj_list):
                 try:
                     if test_obj != api_obj:
                         TESTS[location] = False
                         log.write('obj {} != obj {}'.format(test_obj, api_obj))
-                except Exception, e:
+                except Exception as e:
                     log.write('Validation error: %s' % e, level='error')
                     TESTS[location] = False
         else:
@@ -669,7 +676,7 @@ class TestScenario(object):
         try:
             tools.Request('http://%s/db/api/clear/' % self.student_ip, {}, post=True).get_response()
             TESTS["clear"] = True
-        except Exception, e:
+        except Exception as e:
             log.write("/clear call error: %s" % e, level='error')
             TESTS["clear"] = False
 
@@ -690,12 +697,12 @@ class TestScenario(object):
     def create_content(self):
         log.write('Let there be content')
         for f in self.test_conf['forums']:
-            f['user'] = random.choice(self.users.keys())
+            f['user'] = random_choice(self.users.keys())
             self.forum_actor.create(f)
 
         for t in self.test_conf['threads']:
-            t['forum'] = random.choice(self.forums.keys())
-            t['user'] = random.choice(self.users.keys())
+            t['forum'] = random_choice(self.forums.keys())
+            t['user'] = random_choice(self.users.keys())
             thread = self.thread_actor.create(t)
             self._create_posts(thread.id)
 
@@ -723,7 +730,7 @@ class TestScenario(object):
             is_child = random.random() > self.test_conf['single_posts_rate']
             post_indexes = [index for index in posts.keys() if posts[index].thread == thread.id]
             if (is_child and post_indexes):
-                parent = posts[random.choice(post_indexes)] 
+                parent = posts[random_choice(post_indexes)] 
                 return parent.id, parent.thread, parent.forum
             else:
                 return None, thread.id, thread.forum
@@ -731,7 +738,7 @@ class TestScenario(object):
         posts_number = random.randint(self.test_conf['min_posts_number'], self.test_conf['max_posts_number'])
         first_date = datetime.datetime(2014, 1, 1, 0, 0,0)
         thread = self.threads.get(thread)
-        for index in xrange(posts_number):
+        for index in range(posts_number):
             first_date, date = generate_random_date(first_date)
             parent, thread_id, forum = generate_random_parent_id_and_tid(self.posts, thread)
             post = {
@@ -745,7 +752,7 @@ class TestScenario(object):
                 'parent': parent,
                 'thread': thread_id,
                 'forum': forum,
-                'user': random.choice(self.users.keys()),
+                'user': random_choice(self.users.keys()),
             }
             self.post_actor.create(post)
 
@@ -761,15 +768,15 @@ class TestScenario(object):
                 p['parent'] = parent
                 p['thread'] = thread_id
             else:
-                p['thread'] = random.choice(self.threads.keys())
+                p['thread'] = random_choice(self.threads.keys())
             thread = self.threads[p['thread']]
             p['forum'] = thread.forum
-            p['user'] = random.choice(self.users.keys())
+            p['user'] = random_choice(self.users.keys())
             created_post = self.post_actor.create(p)
             if childs: self._setup_posts_tree(childs, parent=created_post.id, thread_id=p['thread'])
 
     def test_errors(self):
-        post = random.choice(self.posts.values())
+        post = random_choice(self.posts.values())
         not_found_post = copy.deepcopy(post)
         not_found_post.id = -42
         res = self.post_actor.details(not_found_post, related=[], plain=True)
@@ -779,7 +786,7 @@ class TestScenario(object):
         else:
             TESTS["errors"] = False
             log.write("Get nonexisting post response code was %s instead %s" % (res.get("code"), 1), level='error')
-        u = random.choice(self.test_conf['users'])
+        u = random_choice(self.test_conf['users'])
         res = self.user_actor.create(u, plain=True)
         res = res if isinstance(res, dict) else {"code": 0, "response": res}
         if res.get("code") == 5:
@@ -788,7 +795,7 @@ class TestScenario(object):
             TESTS["errors"] = TESTS["errors"] and False
             log.write("Create existing user response code was %s instead %s" % (res.get("code"), 5), level='error')
 
-        thread = random.choice(self.threads.values())
+        thread = random_choice(self.threads.values())
         res = self.thread_actor.details(thread, related=["user", "thread"], plain=True)
         res = res if isinstance(res, dict) else {"code": 0, "response": res}
         if res.get("code") == 3:
@@ -832,14 +839,14 @@ class TestScenario(object):
         # print 'TEST POSTS'
         log.write('List posts')
         for params in constants.TEST_POSTS['list']:
-            objects = copy.deepcopy(self.posts.values())
+            objects = copy.deepcopy(list(self.posts.values()))
             if 'forum' not in params:
-                thread = random.choice(self.threads.values()) 
+                thread = random_choice(self.threads.values()) 
                 params['thread'] = thread.id
             elist = EntitiesList(objects, **params)
             self.post_actor.list(params, elist.objects)
         
-        post = random.chonot_found_post = random.choice(self.posts.values())
+        post = random.chonot_found_post = random_choice(self.posts.values())
         log.write('Remove post')
         self.post_actor.remove({'post': post.id}, post)
         log.write('Restore post')
@@ -848,8 +855,8 @@ class TestScenario(object):
         self.post_actor.update({'post': post.id, 'message': post.message}, post)
         log.write('Likes time!!!')
         for _ in range(constants.TEST_POSTS['votes']):
-            post = random.choice(self.posts.values())
-            vote = random.choice([1, -1])
+            post = random_choice(self.posts.values())
+            vote = random_choice([1, -1])
             self.post_actor.vote({'post': post.id, 'vote': vote}, post)
 
     def test_threads(self):
@@ -861,12 +868,12 @@ class TestScenario(object):
             self.thread_actor.list(params, elist.objects)
         log.write('And list posts in them')
         for params in constants.TEST_THREADS['listPosts']:
-            thread = random.choice(self.threads.values())
+            thread = random_choice(self.threads.values())
             params['thread'] = thread.id
             objects = copy.deepcopy([p for p in self.posts.values() if p.thread == thread.id]) 
             elist = EntitiesList(objects, **params)
             self.thread_actor.list_posts(params, elist.objects)        
-        thread = random.choice(self.threads.values())
+        thread = random_choice(self.threads.values())
         thread_posts = EntitiesList([p for p in self.posts.values() if p.thread == thread.id], order='desc')
         log.write('Go away thread!')
         self.thread_actor.remove({'thread': thread.id}, thread, thread_posts.objects)
@@ -880,18 +887,18 @@ class TestScenario(object):
         self.thread_actor.update({'thread': thread.id, 'message': thread.message, 'slug': 'newslug'}, thread)
         log.write('Likes time...again!')
         for _ in range(constants.TEST_THREADS['votes']):
-            thread = random.choice(self.threads.values())
-            vote = random.choice([1, -1])
+            thread = random_choice(self.threads.values())
+            vote = random_choice([1, -1])
             self.thread_actor.vote({'thread': thread.id, 'vote': vote}, thread)
         log.write('Subscribe me')
         for _ in range(constants.TEST_THREADS['subscriptions']):
-            thread = random.choice(self.threads.values())
-            user = random.choice(self.users.values())
+            thread = random_choice(self.threads.values())
+            user = random_choice(self.users.values())
             self.thread_actor.subscribe({'thread': thread.id, 'user': user.unique_id}, thread)
         log.write('Unsubscribe me')
         for _ in range(constants.TEST_THREADS['unsubscriptions']):
-            thread = random.choice(self.threads.values())
-            user = random.choice(self.users.values())
+            thread = random_choice(self.threads.values())
+            user = random_choice(self.users.values())
             self.thread_actor.unsubscribe({'thread': thread.id, 'user': user.unique_id}, thread)
 
     def test_users(self):
@@ -931,6 +938,9 @@ class TestScenario(object):
             follower = self.users[params['follower']]
             followee = self.users[params['followee']]
             self.user_actor.unfollow(params, follower, followee)
+
+def random_choice(items):
+    return random.choice(list(items))
 
 def produce_docs(with_toc=False):
     tpl = open('../doc/doc_template.md').read()
@@ -990,7 +1000,7 @@ if __name__ == '__main__':
 
     if not passed and not options.verbose:
         for line in log.test_log:
-            print '%s: %s\n' % (line['level'], line['message'])
+            print ('%s: %s\n' % (line['level'], line['message']))
     pprint.pprint(TESTS)
     passed_str = '%d/%d' % (num_passed_tests, len(TESTS))
-    print passed_str + ' tests passed'
+    print (passed_str + ' tests passed')

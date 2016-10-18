@@ -1,9 +1,15 @@
 import json
 import smtplib
 import requests
-import urlparse
 import unittest
-import ConfigParser
+import sys
+
+if sys.version_info[0] > 2:
+    import urllib.parse
+    import configparser
+else:
+    import urlparse
+    import ConfigParser as configparser
 
 try:
     import MySQLdb
@@ -14,7 +20,7 @@ except ImportError:
 class Configuration(object):
     def __init__(self, config_path):
         self.config_path = config_path
-        self.config = ConfigParser.SafeConfigParser()
+        self.config = configparser.SafeConfigParser()
         self.config.read(config_path)
 
     def get_section(self, section):
@@ -37,7 +43,7 @@ class Request(object):
     def get_response(self):
         try:
             r = self.method(self.url, timeout=5, headers=self.headers, **self.payload)
-        except Exception, e:
+        except Exception as e:
             raise ValueError('HTTP error: %s' % str(e))
         if r.status_code >= 300:
             raise ValueError('Request %s return code not 2xx: %s' % (r.url, r.status_code))
@@ -125,7 +131,7 @@ def test():
     assert test_response['foo'][0] == 'bar'
     assert test_response['one'][0] == 'two'
     sendemail(to_addr_list=('s.stupnikov@corp.mail.ru',), subject='Hello', message='World')
-    print 'TESTS: OK'
+    print ('TESTS: OK')
 
 if __name__ == '__main__':
     test()
